@@ -1,7 +1,8 @@
 ;(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);throw new Error("Cannot find module '"+o+"'")}var f=n[o]={exports:{}};t[o][0].call(f.exports,function(e){var n=t[o][1][e];return s(n?n:e)},f,f.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 var mesher = require('heightmap-mesher')
+var camera = require('basic-camera')()
 var normals = require('mesh-normals')
-var camera = require('./')()
+var createSidebar = require('./sidebar')
 
 var shell = require('gl-now')({ clearColor: [1, 1, 1, 0] })
 var perlin = require('perlin').noise.perlin2
@@ -21,35 +22,25 @@ shell.on('gl-init', init)
 shell.on('gl-render', render)
 
 var meshes = []
+var sidebar
 var shader
 
 function init() {
   var gl = shell.gl
 
   shader = createShader(gl
-    , "attribute vec3 position;\nattribute vec3 normal;\n\nuniform mat4 projection;\nuniform mat4 model;\nuniform mat4 view;\n\nvarying vec3 pos;\nvarying vec3 norm;\n\nvoid main() {\n  pos = position;\n  norm = normal;\n  gl_Position = projection * view * model * vec4(position, 1.0);\n}\n"
-    , "precision mediump float;\n\nvarying vec3 pos;\nvarying vec3 norm;\n\nvoid main() {\n  const float LOG2 = 1.442695;\n  const float density = 0.06125;\n  float z = gl_FragCoord.z / gl_FragCoord.w;\n  float fogFactor = 1.0 - clamp(exp2(-density * density * z * z * LOG2), 0.0, 1.0);\n\n  gl_FragColor = vec4(mix(vec3(norm.x, norm.y, 0.5), vec3(1.0,1.0,1.0), fogFactor), 1.0);\n}\n"
+    , "attribute vec3 position;\nattribute vec3 normal;\n\nuniform vec3 uAmbientColor;\nuniform vec3 uaDirectionalColor;\nuniform vec3 ubDirectionalColor;\nuniform vec3 uaLightingDirection;\nuniform vec3 ubLightingDirection;\n\nuniform mat4 projection;\nuniform mat4 model;\nuniform mat4 view;\n\nvarying vec3 vNorm;\nvarying vec3 vLightWeighting;\n\nvoid main() {\n\n  float adlw = max(dot(normal, uaLightingDirection), 0.0);\n  float bdlw = max(dot(normal, ubLightingDirection), 0.0);\n\n  vNorm = normal;\n  vLightWeighting = uAmbientColor + uaDirectionalColor * adlw + ubDirectionalColor * bdlw;\n\n  gl_Position = projection * view * model * vec4(position, 1.0);\n}\n"
+    , "precision mediump float;\n\nvarying vec3 vNorm;\nvarying vec3 vLightWeighting;\n\nvoid main() {\n  // (fog is white)\n  const vec3 fogColor = vec3(1.0);\n\n  // Fog Calculations:\n  const float LOG2 = 1.442695;\n  const float density = 0.05125;\n  float z = gl_FragCoord.z / gl_FragCoord.w;\n  float fogFactor = 1.0 - clamp(exp2(-density * density * z * z * LOG2), 0.0, 1.0);\n\n  vec3 terrainColor = vLightWeighting * vec3(0.5); // vec3(vNorm.x, vNorm.y, 0.5);\n\n  gl_FragColor = vec4(\n    mix(\n      terrainColor,\n      fogColor,\n      fogFactor\n    ), 1.0\n  );\n}\n"
   )
 
-  meshes = [
-      createMesh(gl, +1, +2)
-    , createMesh(gl, +1, +1)
-    , createMesh(gl, +1, +0)
-    , createMesh(gl, +1, -1)
-    , createMesh(gl, +1, -2)
+  meshes = []
 
-    , createMesh(gl, +0, +2)
-    , createMesh(gl, +0, +1)
-    , createMesh(gl, +0, +0)
-    , createMesh(gl, +0, -1)
-    , createMesh(gl, +0, -2)
+  for (var x = -3; x <= 3; x++)
+  for (var y = -3; y <= 3; y++) {
+    meshes.push(createMesh(gl, x, y))
+  }
 
-    , createMesh(gl, -1, +2)
-    , createMesh(gl, -1, +1)
-    , createMesh(gl, -1, +0)
-    , createMesh(gl, -1, -1)
-    , createMesh(gl, -1, -2)
-  ]
+  sidebar = createSidebar()
 }
 
 var model = mat4.identity(new Float32Array(16))
@@ -61,7 +52,7 @@ function render() {
   var gl = shell.gl
   t += 1
 
-  camera.rotateY(Math.sin(t / 100 + Math.PI) * 0.025 + 0.01)
+  camera.rotateY(Math.sin(t / 100 + Math.PI) * 0.0025 + 0.001)
   camera.position[1] = -1
   camera.position[2] += Math.sin(t / 250) * 0.05
 
@@ -75,16 +66,23 @@ function render() {
   shader.uniforms.projection = projection
   shader.uniforms.view = view
 
+  shader.uniforms.uaLightingDirection = [Math.max(0.2,Math.sin(0.015 * t)*1.2),Math.max(0.2,Math.cos(0.01132 * t)*1.2), -1]
+  shader.uniforms.uaDirectionalColor = [(+sidebar.dr.value|0)/255, (+sidebar.dg.value|0)/255, (+sidebar.db.value|0)/255]
+
+  shader.uniforms.ubLightingDirection = [Math.max(0.2,Math.cos(0.015 * t + 0.5)*1.2),Math.max(0.2,Math.sin(0.01132 * t + 0.3)*1.2), -1]
+  shader.uniforms.ubDirectionalColor = [(+sidebar.br.value|0)/255, (+sidebar.bg.value|0)/255, (+sidebar.bb.value|0)/255]
+
+  shader.uniforms.uAmbientColor = [(+sidebar.ar.value|0)/255, (+sidebar.ag.value|0)/255, (+sidebar.ab.value|0)/255]
+
   shader.attributes.position.location = 0
   shader.attributes.normal.location = 1
 
   for (var i = 0; i < meshes.length; i += 1) {
-    gridp[0] = meshes[i].x - 0.5
-    gridp[1] = -0.35
-    gridp[2] = meshes[i].y - 0.5
+    gridp[0] = (meshes[i].x - 0.5) * scale[0]
+    gridp[1] = -0.35 * scale[1]
+    gridp[2] = (meshes[i].y - 0.5) * scale[2]
 
-    mat4.scale(model, tempm, scale)
-    mat4.translate(model, model, gridp)
+    mat4.translate(model, tempm, gridp)
     shader.uniforms.model = model
 
     meshes[i].vao.bind()
@@ -101,6 +99,12 @@ function createMesh(gl, x, y) {
       , y
     ), 0.25
   )
+
+  for (var i = 0; i < vertData.length; i += 3) {
+    vertData[i  ] *= scale[0]
+    vertData[i+1] *= scale[1]
+    vertData[i+2] *= scale[2]
+  }
 
   var normData = normals(vertData)
   var vertBuffer = createBuffer(gl, vertData)
@@ -127,11 +131,15 @@ function perlinify(array, _x, _y) {
   _x *= array.shape[0] - 1
   _y *= array.shape[1] - 1
   return fill(array, function(x, y) {
-    return perlin((x + _x) * 0.055 + 972, (y + _y) * 0.055 - 234)
+    var v = perlin((x + _x) * 0.055 + 972, (y + _y) * 0.055 - 234)
+    v += perlin((x + _x) * 0.5 + 102.01, (y + _y) * 0.5 - 948.01) * 0.05
+    v += perlin((x + _x) * 0.005 + 152.01, (y + _y) * 0.005 - 448.01) * 0.25
+    // if (v < 0) v = ~~(v*5)/5
+    return v
   })
 }
 
-},{"./":2,"fs":4,"gl-buffer":8,"gl-matrix":19,"gl-now":20,"gl-shader":32,"gl-vao":49,"heightmap-mesher":50,"mesh-normals":51,"ndarray-fill":52,"perlin":61,"zeros":64}],2:[function(require,module,exports){
+},{"./sidebar":67,"basic-camera":2,"fs":4,"gl-buffer":8,"gl-matrix":19,"gl-now":20,"gl-shader":32,"gl-vao":49,"heightmap-mesher":50,"mesh-normals":51,"ndarray-fill":52,"perlin":61,"zeros":66}],2:[function(require,module,exports){
 var glm = require('gl-matrix')
 var vec3 = glm.vec3
 var mat3 = glm.mat3
@@ -14303,10 +14311,79 @@ module.exports=require(13)
 
 })(typeof module === "undefined" ? this : module.exports);
 },{}],62:[function(require,module,exports){
+var through = require('through')
+
+module.exports = tweakable
+
+function tweakable(create, update, remove, equal) {
+  create = create || _create
+  update = update || _update
+  remove = remove || _remove
+  equal = equal || _equal
+
+  return function createStream(parent) {
+    var stream = through(write, end)
+    var el = create.call(stream, parent)
+    var value = null
+
+    stream.el = el
+    stream.value = value
+    stream.on('data', function(d) {
+      var eq = equal(d, value)
+      stream.value = value = d
+      if (!eq) stream.emit('changed', d)
+    })
+
+    return stream
+
+    function write(d) {
+      update.call(stream, d)
+      stream.queue(d)
+    }
+
+    function end() {
+      remove.call(stream)
+      stream.queue(null)
+    }
+  }
+}
+
+function _equal(a, b) {
+  return a === b
+}
+
+function _create(parent) {
+  var input = document.createElement('input')
+  var stream = this
+  parent.appendChild(input)
+
+  ;['change'
+  , 'keyup'
+  ].map(function(name) {
+    input.addEventListener(name, function(e) {
+      stream.queue(input.value)
+    })
+  })
+
+  return input
+}
+
+function _update(data) {
+  this.el.value = data
+}
+
+function _remove() {
+  var el = this.el
+  if (el.parentNode) el.parentNode.removeChild(el)
+}
+
+},{"through":63}],63:[function(require,module,exports){
+module.exports=require(43)
+},{"__browserify_process":7,"stream":5}],64:[function(require,module,exports){
 module.exports=require(14)
-},{"iota-array":63}],63:[function(require,module,exports){
+},{"iota-array":65}],65:[function(require,module,exports){
 module.exports=require(15)
-},{}],64:[function(require,module,exports){
+},{}],66:[function(require,module,exports){
 "use strict"
 
 var ndarray = require("ndarray")
@@ -14318,5 +14395,73 @@ module.exports = function zeros(shape) {
   }
   return ndarray(new Float64Array(sz), shape)
 }
-},{"ndarray":62}]},{},[1])
+},{"ndarray":64}],67:[function(require,module,exports){
+var process=require("__browserify_process");var tweakable = require('tweakable')
+var Textbox = tweakable()
+
+module.exports = sidebar
+
+function sidebar() {
+  var el = document.createElement('div')
+  var sb = {}
+
+  header(el, 'Ambient')
+
+  title(el, 'Red')
+  sb.ar = Textbox(el)
+  title(el, 'Green')
+  sb.ag = Textbox(el)
+  title(el, 'Blue')
+  sb.ab = Textbox(el)
+
+  header(el, 'Directional 1')
+
+  title(el, 'Red')
+  sb.dr = Textbox(el)
+  title(el, 'Green')
+  sb.dg = Textbox(el)
+  title(el, 'Blue')
+  sb.db = Textbox(el)
+
+  header(el, 'Directional 2')
+
+  title(el, 'Red')
+  sb.br = Textbox(el)
+  title(el, 'Green')
+  sb.bg = Textbox(el)
+  title(el, 'Blue')
+  sb.bb = Textbox(el)
+
+  process.nextTick(function() {
+    sb.ar.write('110')
+    sb.ag.write('35')
+    sb.ab.write('140')
+    sb.dr.write('255')
+    sb.dg.write('100')
+    sb.db.write('0')
+    sb.br.write('0')
+    sb.bg.write('225')
+    sb.bb.write('45')
+  })
+
+  el.setAttribute('class', 'sidebar')
+  document.body.appendChild(el)
+  return sb
+}
+
+function title(el, text) {
+  var h4 = document.createElement('h4')
+  el.appendChild(h4)
+  h4.innerText = text
+  return h4
+}
+
+function header(el, text) {
+  var h3 = document.createElement('h3')
+  el.appendChild(h3)
+  h3.innerText = text
+  return h3
+}
+
+},{"__browserify_process":7,"tweakable":62}]},{},[1])
 ;
