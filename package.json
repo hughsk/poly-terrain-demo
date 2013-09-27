@@ -7,7 +7,7 @@
   "dependencies": {},
   "devDependencies": {
     "beefy": "~0.4.1",
-    "brfs": "~0.0.7",
+    "glslifyify": "0.0.0",
     "browserify": "~2.29.1",
     "gl-buffer": "~0.1.1",
     "gl-matrix": "~2.0.0",
@@ -23,7 +23,7 @@
     "tweakable": "0.0.0"
   },
   "scripts": {
-    "start": "beefy demo.js:bundle.js --live -- -t brfs",
+    "start": "beefy demo.js:bundle.js --live -- -t glslifyify",
     "prepublish": "browserify -t brfs demo.js > bundle.js"
   },
   "author": "Hugh Kennedy <hughskennedy@gmail.com> (http://hughskennedy.com)",

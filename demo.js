@@ -28,8 +28,8 @@ function init() {
   var gl = shell.gl
 
   shader = createShader(gl
-    , fs.readFileSync(__dirname + '/shaders/terrain.vert', 'utf8')
-    , fs.readFileSync(__dirname + '/shaders/terrain.frag', 'utf8')
+    , require('./shaders/terrain.vert')
+    , require('./shaders/terrain.frag')
   )
 
   meshes = []

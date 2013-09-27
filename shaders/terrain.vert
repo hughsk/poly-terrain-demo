@@ -11,16 +11,15 @@ uniform mat4 projection;
 uniform mat4 model;
 uniform mat4 view;
 
-varying vec3 vNorm;
 varying vec3 vLightWeighting;
 
+#pragma glslify: lighting = require(./simple_light)
+
 void main() {
-
-  float adlw = max(dot(normal, uaLightingDirection), 0.0);
-  float bdlw = max(dot(normal, ubLightingDirection), 0.0);
-
-  vNorm = normal;
-  vLightWeighting = uAmbientColor + uaDirectionalColor * adlw + ubDirectionalColor * bdlw;
+  vLightWeighting = uAmbientColor
+    + lighting(uaDirectionalColor, normal, uaLightingDirection)
+    + lighting(ubDirectionalColor, normal, ubLightingDirection)
+    ;
 
   gl_Position = projection * view * model * vec4(position, 1.0);
 }
