@@ -24,7 +24,7 @@
   },
   "scripts": {
     "start": "beefy demo.js:bundle.js --live -- -t glslifyify",
-    "prepublish": "browserify -t brfs demo.js > bundle.js"
+    "prepublish": "browserify -t glslifyify demo.js > bundle.js"
   },
   "author": "Hugh Kennedy <hughskennedy@gmail.com> (http://hughskennedy.com)",
   "license": "MIT",
